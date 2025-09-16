@@ -1,0 +1,54 @@
+\documentclass[a4paper]{article}
+
+\usepackage{color}
+\usepackage[top=1in,bottom=1in,left=1.2in,right=1.2in]{geometry}
+\usepackage{hyperref}
+\usepackage[small]{titlesec}
+
+\usepackage{graphicx}
+\usepackage{color}
+
+\usepackage[]{minted}
+\newenvironment{code}{\captionsetup{type=listing}}
+
+
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{TODO:} #1}}
+
+\title{Assignment 1 \\ \begin{small}\url{FULL_GITHUB_REPOSITORY_URL}\end{small}}
+\author{Group 22 \and Matthew Evans \\ mre042000 \and Ruochen Meng \\ rxm220120 \and Saul Garay \\ SAG180009}
+
+%\author{Full Name \\ Net ID \and Full Name \\ Net ID}
+
+\date{}
+
+\begin{document}
+\maketitle
+% \input{begin.tex}
+
+
+\section{Implementation Details}
+
+\begin{listing}[ht]
+  \begin{minted}[frame=single,framesep=10pt]{python}
+  import numpy  
+  print("this is a piece of code")
+\end{minted}
+  \caption{Example of a Code Piece.}
+  \label{lst:eg}
+\end{listing}
+
+\subsection{Unigram and bigram probability computation}
+
+\subsection{Smoothing}
+
+\subsection{Unknown word handling}
+
+\subsection{Implementation of perplexity}
+
+\section{Eval, Analysis and Findings}
+
+\section{Others}
+
+
+
+\end{document}

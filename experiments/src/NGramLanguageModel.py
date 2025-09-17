@@ -37,7 +37,23 @@ class NGramLanguageModel():
         self.vocabulary: set[str] = NGramLanguageModel._get_vocabulary(training_data, coverage)
         self.counts: Dict[Tuple[str, ...], int] = NGramLanguageModel._get_token_counts(training_data, self.vocabulary, n)
         self.all_tokens_count: int = sum(self.counts.values())
-        
+        self.context_counts: Dict[Tuple[str, ...], int] = NGramLanguageModel.get_context_counts(self.counts) if n > 1 else {}
+
+        self.DEBUG = False
+
+    @staticmethod
+    def get_context_counts(ngram_counts: Dict[Tuple[str, ...], int]) -> Dict[Tuple[str, ...], int]:
+        """
+        Calculates (n-1)-gram context counts from n-gram counts.
+        """
+        context_counts: Dict[Tuple[str, ...], int] = dict()
+        if not ngram_counts:
+            return context_counts
+            
+        for ngram, count in ngram_counts.items():
+            context = ngram[1:]
+            context_counts[context] = context_counts.get(context, 0) + count
+        return context_counts
     
     def get_probability(self, *tokens: str) -> float:
         """
@@ -59,15 +75,22 @@ class NGramLanguageModel():
         if self.n == 1:
             a = (self.counts.get(tokens, 0) + self.smoothing)
             b = (self.all_tokens_count + (self.smoothing * vocabulary_size))
-            return a / b
+            return a / b if b > 0 else 0.0
         
         # handle ngram case
         else:
-            token = tokens[0]
             preceding = tokens[1:]
-            a = self.counts.get((token,), 0) + self.smoothing
-            b = self.counts.get(preceding, 0) + (self.smoothing * vocabulary_size)
-            return a / b
+
+            # Count of the full n-gram tokens
+            a = self.counts.get(tokens, 0) + self.smoothing
+            
+            # Count of the (n-1) preceding tokens
+            b = self.context_counts.get(preceding, 0) + (self.smoothing * vocabulary_size)
+
+            if self.DEBUG:
+                print(str(a) + " / " + str(b) + " - " + ' '.join(preceding) + " [" + ' '.join(tokens) + "]")
+
+            return a / b if b > 0 else 0.0
 
 
     def get_perplexity(self, datum: str) -> float:

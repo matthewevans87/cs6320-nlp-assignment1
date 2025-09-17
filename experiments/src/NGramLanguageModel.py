@@ -12,7 +12,7 @@ class NGramLanguageModel():
     Statistics are computed upon instantiation.
     """
 
-    def __init__(self, n: int, smoothing: int, unknown_epsilon: float, training_data: Iterable[str]):
+    def __init__(self, n: int, smoothing: int, coverage: float, training_data: Iterable[str]):
         """
         Initialize the model.
         
@@ -24,7 +24,9 @@ class NGramLanguageModel():
             validation_data: Iterable of validation strings (can be loaded line by line)
         """
         self.training_data: Iterable[str] = training_data
-        self.unknown_epsilon: float = unknown_epsilon
+        if (coverage < 0 or coverage > 1):
+            raise ValueError('coverage must be between 0 and 1')
+        self.coverage: float = coverage
         self.n: int = n
         if (n <= 0):
             raise ValueError('n must be greater than 0')
@@ -32,7 +34,7 @@ class NGramLanguageModel():
         if (smoothing < 0):
             raise ValueError('smoothing must be greater or equal to 0')
         
-        self.vocabulary: set[str] = NGramLanguageModel._get_vocabulary(training_data, unknown_epsilon)
+        self.vocabulary: set[str] = NGramLanguageModel._get_vocabulary(training_data, coverage)
         self.counts: Dict[Tuple[str, ...], int] = NGramLanguageModel._get_token_counts(training_data, self.vocabulary, n)
         self.all_tokens_count: int = sum(self.counts.values())
         
@@ -85,30 +87,34 @@ class NGramLanguageModel():
         return float(np.mean(pps))
     
     @staticmethod
-    def _get_vocabulary(data: Iterable[str], unknown_epsilon: float) -> set[str]:
+    def _get_vocabulary(data: Iterable[str], coverage: float) -> set[str]:
         
-        highest_frequency = 0
         token_counts: dict[str, int] = dict()
         for line in data:
             for token in NGramLanguageModel._parse_tokens(line):
                 token_counts[token] = token_counts.get(token, 0) + 1
-                if token_counts[token] > highest_frequency:
-                    highest_frequency = token_counts[token]
                 
-        # Handle mapping tokens to <UNK>
-        p = math.log2(highest_frequency)
-        t = 2 ** (p - unknown_epsilon)
-        
-        unk_count = 0
-        for token, count in list(token_counts.items()):
-            if count < t:
-                unk_count += count
-                del token_counts[token]
-        
-        token_counts[UNKNOWN_TOKEN] = unk_count
+        token_counts = NGramLanguageModel.apply_unk_by_coverage(token_counts, coverage)
         
         vocabulary = set(token_counts.keys())
         return vocabulary
+    
+    @staticmethod
+    def apply_unk_by_coverage(token_counts, coverage):
+        total_mass = sum(token_counts.values())
+        sorted_token_counts = sorted(token_counts.items(), key=lambda x: x[1], reverse=True)
+
+        updated_token_counts: dict[str, int] = dict()
+        cumulative_mass = 0
+        unknown_count = 0
+        for token, count in sorted_token_counts:
+            if cumulative_mass / total_mass < coverage:
+                updated_token_counts[token] = count
+                cumulative_mass += count
+            else:
+                unknown_count += count
+        updated_token_counts[UNKNOWN_TOKEN] = unknown_count
+        return updated_token_counts
 
     @staticmethod
     def _get_token_counts(data: Iterable[str], vocabulary: set[str], n: int) -> Dict[Tuple[str, ...], int]:

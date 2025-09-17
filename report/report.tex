@@ -9,6 +9,7 @@
 \usepackage{color}
 
 \usepackage[]{minted}
+\usepackage{amsmath}
 \newenvironment{code}{\captionsetup{type=listing}}
 
 
@@ -42,6 +43,15 @@
 \subsection{Smoothing}
 
 \subsection{Unknown word handling}
+
+\begin{enumerate}
+  \item Sort tokens in descending order by occurrence count.
+  \item Iterate over token counts, accumulating mass, \(M\), i.e.,
+        \[
+          \text{M}_{\text{cum}} = \sum_{t_i}^{t_n}\text{C}(t_i)
+        \]
+        If \((\text{M}_{\text{cum}} / M_{\text{total}}) < \text{M}_{\text{coverage}}\), assign the token's mass to the \texttt{<UNK>} token.
+\end{enumerate}
 
 \subsection{Implementation of perplexity}
 

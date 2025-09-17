@@ -3,19 +3,18 @@ from NGramLanguageModel import NGramLanguageModel
 
 def main():
     
-    n = 1   # the degree of the n-gram. e.g., unigram -> n=1
+    n = 2   # the degree of the n-gram. e.g., unigram -> n=1
     smoothing = 1   # the degree of the smoothing. e.g., "Add 1" -> 1
-    unknown_epsilon = 10 # log2 distance from the count of the most frequent word, below which a token is mapped to '<UNK>'
+    coverage = 0.99
+    model:  NGramLanguageModel
     with open('../A1_DATASET/train.txt', 'r') as f:
         train = f.readlines()
+        model = NGramLanguageModel(n, smoothing, coverage, train)
         
-        with open('../A1_DATASET/val.txt', 'r') as f:
-            val = f.readlines()
-        
-            model = NGramLanguageModel(n, smoothing, unknown_epsilon, train)
-            
-            pp = model.get_mean_perplexity(val)
-            print(pp)
+    with open('../A1_DATASET/val.txt', 'r') as f:
+        val = f.readlines()
+        pp = model.get_mean_perplexity(val)
+        print(pp)
     
 
 if __name__ == "__main__":

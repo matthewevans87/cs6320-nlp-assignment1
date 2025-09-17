@@ -12,9 +12,9 @@ class NGramLanguageModel():
     Statistics are computed upon instantiation.
     """
 
-    def __init__(self, n: int, smoothing: int, unknown_epsilon: float, training_data: Iterable[str], validation_data: Iterable[str]):
+    def __init__(self, n: int, smoothing: int, unknown_epsilon: float, training_data: Iterable[str]):
         """
-        Initialize the base model.
+        Initialize the model.
         
         Args:
             n: the size of the n-grams
@@ -24,7 +24,6 @@ class NGramLanguageModel():
             validation_data: Iterable of validation strings (can be loaded line by line)
         """
         self.training_data: Iterable[str] = training_data
-        self.validation_data: Iterable[str] = validation_data
         self.unknown_epsilon: float = unknown_epsilon
         self.n: int = n
         if (n <= 0):
@@ -32,14 +31,11 @@ class NGramLanguageModel():
         self.smoothing: int = smoothing
         if (smoothing < 0):
             raise ValueError('smoothing must be greater or equal to 0')
-        self.vocabulary: set[str]
-        self.vocabulary_size: int
-        self.init_vocabulary()
         
-        self.counts: Dict[Tuple[str, ...], int]
-        self.all_tokens_count: int
-        self.init_statistics()
-    
+        self.vocabulary: set[str] = NGramLanguageModel._get_vocabulary(training_data, unknown_epsilon)
+        self.counts: Dict[Tuple[str, ...], int] = NGramLanguageModel._get_token_counts(training_data, self.vocabulary, n)
+        self.all_tokens_count: int = sum(self.counts.values())
+        
     
     def get_probability(self, *tokens: str) -> float:
         """
@@ -55,34 +51,53 @@ class NGramLanguageModel():
         if len(tokens) != self.n:
             raise ValueError('Length of tokens must match n-gram length')
         
-        # TODO: Handle <UNK> case
+        vocabulary_size = len(self.vocabulary)
         
         # handle unigram case
         if self.n == 1:
-            return (self.counts.get(tokens, 0) + self.smoothing) / (self.all_tokens_count + (self.smoothing * self.vocabulary_size))
+            a = (self.counts.get(tokens, 0) + self.smoothing)
+            b = (self.all_tokens_count + (self.smoothing * vocabulary_size))
+            return a / b
         
         # handle ngram case
         else:
             token = tokens[0]
             preceding = tokens[1:]
             a = self.counts.get((token,), 0) + self.smoothing
-            b = self.counts.get(preceding, 0) + (self.smoothing * self.vocabulary_size)
+            b = self.counts.get(preceding, 0) + (self.smoothing * vocabulary_size)
             return a / b
+
+
+    def get_perplexity(self, datum: str) -> float:
+        ngrams: list[tuple[str, ...]] = []
+
+        ngrams.extend(NGramLanguageModel._get_ngrams_from_line(datum, self.vocabulary, self.n))
+        nll = - np.log([self.get_probability(*tokens) for tokens in ngrams])
+        pp: np.float64 = np.exp(np.mean(nll))
+
+        return pp
     
+    def get_mean_perplexity(self, data: Iterable[str]) -> float:
+        pps: list[float] = []
+        for line in data:
+            pp = self.get_perplexity(line)
+            pps.append(pp)
+        return float(np.mean(pps))
     
-    def init_vocabulary(self) -> None:
+    @staticmethod
+    def _get_vocabulary(data: Iterable[str], unknown_epsilon: float) -> set[str]:
         
         highest_frequency = 0
         token_counts: dict[str, int] = dict()
-        for line in self.training_data:
-            for token in self.parse_tokens(line):
+        for line in data:
+            for token in NGramLanguageModel._parse_tokens(line):
                 token_counts[token] = token_counts.get(token, 0) + 1
                 if token_counts[token] > highest_frequency:
                     highest_frequency = token_counts[token]
                 
         # Handle mapping tokens to <UNK>
         p = math.log2(highest_frequency)
-        t = 2 ** (p - self.unknown_epsilon)
+        t = 2 ** (p - unknown_epsilon)
         
         unk_count = 0
         for token, count in list(token_counts.items()):
@@ -92,57 +107,57 @@ class NGramLanguageModel():
         
         token_counts[UNKNOWN_TOKEN] = unk_count
         
-        self.vocabulary = set(token_counts.keys())
-        self.vocabulary_size = len(self.vocabulary)
-    
-        
-    def init_statistics(self) -> None:
+        vocabulary = set(token_counts.keys())
+        return vocabulary
+
+    @staticmethod
+    def _get_token_counts(data: Iterable[str], vocabulary: set[str], n: int) -> Dict[Tuple[str, ...], int]:
         """
         Build the statistics to be used by the model
         """
         
         counts: Dict[Tuple[str, ...], int] = dict()
-        
-        for line in self.training_data:
-            # Pad the preceding tokens with the start token
-            preceding = ["<S>"] * self.n
-            for token in self.parse_tokens(line):
-                if token not in self.vocabulary:
-                    token = UNKNOWN_TOKEN
-                preceding.append(token)
-                if len(preceding) > self.n:
-                    preceding.pop(0)
-                key: Tuple[str, ...] = tuple(preceding)
+
+        for line in data:
+            ngrams = NGramLanguageModel._get_ngrams_from_line(line, vocabulary, n)
+            for key in ngrams:
                 counts[key] = counts.get(key, 0) + 1
                
-        self.counts = counts
-        self.all_tokens_count = sum(counts.values())
-
-
-    def get_perplexity(self) -> float:
-        # build validation set n-grams
-        validation_ngrams: list[tuple[str, ...]] = []
-        
-        for line in self.validation_data:
-            # Pad the preceding tokens with the start token
-            preceding = [START_TOKEN] * self.n
-            for token in self.parse_tokens(line):
-                if token not in self.vocabulary:
-                    token = UNKNOWN_TOKEN
-                preceding.append(token)
-                if len(preceding) > self.n:
-                    preceding.pop(0)
-                ngram: Tuple[str, ...] = tuple(preceding)
-                validation_ngrams.append(ngram)
-        
-        pp = np.exp(1/self.vocabulary_size * np.sum(- np.log([self.get_probability(*tokens) for tokens in validation_ngrams])))
-        return pp
+        return counts
     
     
-    def parse_tokens(self, line: str) -> list[str]:
+    @staticmethod
+    def _parse_tokens(line: str) -> list[str]:
         """
         Parse and split a line into tokens.
         """
         # For now, just split on whitespace characters.
-        # Count consider more sophisticated approach such as using "stop words", etc.
+        # Might consider more sophisticated approach such as using "stop words", etc.
         return line.lower().split()
+
+    
+    @staticmethod
+    def _get_ngrams_from_line(line: str, vocabulary: set[str], n: int) -> List[Tuple[str, ...]]:
+        """
+        Get the n-grams from a line of text.
+        
+        Args:
+            line: The line of text to parse
+
+        Returns:
+            A list of n-grams extracted from the line
+        """
+        
+        ngrams: list[tuple[str, ...]] = []
+        # Pad the preceding tokens with the start token
+        preceding = [START_TOKEN] * n
+        for token in NGramLanguageModel._parse_tokens(line):
+            if token not in vocabulary:
+                token = UNKNOWN_TOKEN
+            preceding.append(token)
+            if len(preceding) > n:
+                preceding.pop(0)
+            ngram: Tuple[str, ...] = tuple(preceding)
+            ngrams.append(ngram)
+                
+        return ngrams

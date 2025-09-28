@@ -71,7 +71,7 @@ class NGramLanguageModel():
         
         # handle ngram case
         else:
-            preceding = tokens[1:]
+            preceding = tokens[:-1]
 
             # Count of the full n-gram tokens
             a = self.ngram_counts.get(tokens, 0) + self.smoothing

@@ -175,9 +175,77 @@ def get_mean_perplexity(self, data: Dataset) -> float:
 
 \section{Evaluation, Analysis and Findings}
 
-% Eval, Analysis and Findings – including but may not be limited to: (1) report training and vali-
-% dation set perpexlity; (2) how the smoothing strategy affects the performance on validation set
-% (30%);
+To evaluate our n-gram language model, we conducted experiments on three key hyperparameters: n-gram size ($n$), the add-k smoothing parameter ($k$), and vocabulary coverage. Performance was measured by perplexity on a validation set. While a lower perplexity score is generally better, our final model selection balances this metric with established principles of language modeling to ensure robustness and utility.
+
+\subsection{Effect of N-gram Size}
+The first experiment evaluated the impact of n-gram size ($n$), with other hyperparameters held constant.
+
+\begin{table}[h!]
+  \centering
+  \begin{tabular}{|l|c|c|}
+    \hline
+    \textbf{Model}  & \textbf{Training Perplexity} & \textbf{Validation Perplexity} \\
+    \hline
+    Unigram ($n=1$) & 420.14                       & \textbf{358.86}                \\
+    Bigram ($n=2$)  & 702.01                       & 835.22                         \\
+    Trigram ($n=3$) & 1868.71                      & 3066.01                        \\
+    \hline
+  \end{tabular}
+  \caption{Perplexity scores for different n-gram sizes ($n$) with $k=1$ and 99\% coverage.}
+  \label{tab:ngram_perplexity}
+\end{table}
+
+\subsubsection{Analysis}
+In theory, perplexity should decrease as $n$ increases due to more available context. Our results show the opposite trend, an outcome that is characteristic of \textbf{data sparsity} from a limited training corpus. While the unigram ($n=1$) model scored best, it does not retain the context of previous words in the sequence. The trigram ($n=3$) model was too complex and suffered from extreme sparsity. Therefore, we selected the \textbf{bigram model ($n=2$)} as it represents the best balance between capturing essential context and avoiding the unreliability of the trigram model.
+
+\subsection{Effect of Smoothing Strategy}
+Using the chosen bigram model, we evaluated the effect of the smoothing parameter $k$.
+
+\begin{table}[h!]
+  \centering
+  \begin{tabular}{|l|c|}
+    \hline
+    \textbf{Smoothing Value ($k$)} & \textbf{Validation Perplexity} \\
+    \hline
+    0 (No Smoothing)               & $\infty$                       \\
+    0.1                            & 324.08                         \\
+    \textbf{1.0 (Laplace)}         & \textbf{835.22}                \\
+    5.0                            & 1791.39                        \\
+    \hline
+  \end{tabular}
+  \caption{Validation perplexity for a bigram model with varying $k$ and 99\% coverage.}
+  \label{tab:smoothing_perplexity}
+\end{table}
+
+\subsubsection{Analysis}
+As expected, the model with no smoothing ($k=0$) produced an infinite perplexity. The results indicate that the lowest perplexity was achieved at $k=0.1$. However, this may represent overfitting to our specific validation set. To prioritize a more general and robust model, we selected the widely-used \textbf{Laplace smoothing ($k=1.0$)} as the optimal choice.
+
+\subsection{Effect of Vocabulary Coverage}
+Finally, the impact of the vocabulary coverage threshold on the bigram model was examined.
+
+\begin{table}[h!]
+  \centering
+  \begin{tabular}{|l|c|}
+    \hline
+    \textbf{Coverage} & \textbf{Validation Perplexity} \\
+    \hline
+    80\%              & 55.92                          \\
+    90\%              & 163.09                         \\
+    95\%              & 351.74                         \\
+    \textbf{99\%}     & \textbf{835.22}                \\
+    100\%             & 1112.94                        \\
+    \hline
+  \end{tabular}
+  \caption{Validation perplexity for a bigram model with varying vocabulary coverage.}
+  \label{tab:coverage_perplexity}
+\end{table}
+
+\subsubsection{Analysis}
+Although the perplexity score is lowest at 80\% coverage, this result is misleading and should be interpreted with caution. The apparent improvement is an artifact of the \texttt{<UNK>} token becoming a high-frequency, easily predictable ``word'', which does not reflect a better understanding of the language. We therefore chose \textbf{99\% coverage} as our optimal value to maintain a rich and useful vocabulary.
+
+\subsection{Findings and Conclusion}
+Our evaluation highlights the importance of carefully interpreting metrics rather than optimizing for them blindly. After balancing empirical results with theoretical principles, our final model is a \textbf{bigram ($n=2$) model with Laplace smoothing ($k=1.0$) and a vocabulary coverage of 99\%}. This configuration, achieving a validation perplexity of \textbf{835.22}, represents a robust baseline that prioritizes real-world utility and accuracy over raw metric optimization.
+
 
 \section{Miscellaneous}
 
@@ -194,9 +262,9 @@ The implementation uses minimal external libraries, primarily relying on Python'
 
 \subsection{Contributions}
 \begin{itemize}
-  \item Matthew Evans: Initial project setup, vocabulary construction, unknown token handling, probability computation, smoothing, and perplexity calculation.
+  \item Matthew Evans: Initial project setup, vocabulary construction, unknown token handling, probability computation, smoothing, and perplexity calculation, documentation, report writing.
   \item Ruochen Meng: Review, bug fixes in probability calculation, improvements to unknown token handling.
-  \item Saul Garay: Review, bug fixes in vocabulary construction and probability calculation.
+  \item Saul Garay: Review, bug fixes in vocabulary construction and probability calculation, evaluation, analysis, hyperparameters selection.
 \end{itemize}
 
 

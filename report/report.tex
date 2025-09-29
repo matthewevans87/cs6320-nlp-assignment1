@@ -12,37 +12,39 @@
 \usepackage{amsmath}
 \newenvironment{code}{\captionsetup{type=listing}}
 
-
-\newcommand{\todo}[1]{\textcolor{red}{\textbf{TODO:} #1}}
-
-\title{Assignment 1 \\ \begin{small}\url{FULL_GITHUB_REPOSITORY_URL}\end{small}}
+\title{Assignment 1 \\ \begin{small}\url{https://github.com/matthewevans87/cs6320-nlp-assignment1}\end{small}}
 \author{Group 22 \and Matthew Evans \\ mre042000 \and Ruochen Meng \\ rxm220120 \and Saul Garay \\ SAG180009}
-
-%\author{Full Name \\ Net ID \and Full Name \\ Net ID}
-
 \date{}
 
 \begin{document}
 \maketitle
-% \input{begin.tex}
-
 
 \section{Implementation Details}
 
-\begin{listing}[ht]
-  \begin{minted}[frame=single,framesep=10pt]{python}
-  import numpy  
-  print("this is a piece of code")
-\end{minted}
-  \caption{Example of a Code Piece.}
-  \label{lst:eg}
-\end{listing}
+The inline documented code can be found at the GitHub repository given above. The experiments can be run from the entry point in \texttt{Main.py}.
 
-\subsection{Unigram and bigram probability computation}
+\subsection{Overview}
+The model builds a vocabulary from the training corpus, and computes n-gram probabilities with add-k smoothing (laplace for k=1). Unknown words are handled by replacing low-frequency words with a special \texttt{<UNK>} token. The model computes perplexity on the test corpus using the smoothed probabilities.
 
-\subsection{Smoothing}
+\subsection{Data Structures}
+The model uses type aliases for clarity:
+\begin{itemize}
+  \item \texttt{Token} - a string representing a word or symbol.
+  \item \texttt{NGram} - a tuple of Tokens representing an n-gram.
+  \item \texttt{Dataset} - a list of strings, each string is a line from the corpus.
+\end{itemize}
+Further, the follow data structures are used:
+\begin{itemize}
+  \item \texttt{Vocabulary: set[Token]} - the set of known tokens.
+  \item \texttt{Token Counts: Dict[Token, int]} - maps each token to its occurrence count.
+  \item \texttt{Probability: float} - represents the probability of an n-gram.
+\end{itemize}
 
-\subsection{Unknown word handling}
+\subsection{Vocabulary Construction}
+The vocabulary is constructed by iterating over the training corpus and counting the occurrences of each token.
+
+\subsubsection{Unknown word handling}
+Tokens which occur less than a specified threshold are replaced with the \texttt{<UNK>} token to handle unknown words in the test set. Specifically, probability mass of tokens is accumulated until a specified coverage threshold is reached, at which point the remaining tokens are replaced with \texttt{<UNK>}. The steps are as follows:
 
 \begin{enumerate}
   \item Sort tokens in descending order by occurrence count.
@@ -53,12 +55,149 @@
         If \((\text{M}_{\text{cum}} / M_{\text{total}}) < \text{M}_{\text{coverage}}\), assign the token's mass to the \texttt{<UNK>} token.
 \end{enumerate}
 
+\subsubsection{Implementation}
+Our implementation, given in \ref{lst:getvocabulary}, computes the vocabulary and applies the unknown token handling as described.
+
+\begin{listing}[H]
+  \begin{minted}[frame=single,framesep=10pt]{python}
+    
+def _get_vocabulary(data: Dataset, coverage: float) -> set[Token]:
+    token_counts: dict[str, int] = dict()
+    for line in data:
+        for token in NGramLanguageModel._parse_tokens(line):
+            token_counts[token] = token_counts.get(token, 0) + 1
+            
+    token_counts = NGramLanguageModel.apply_unk_by_coverage(token_counts, 
+                                                            coverage)
+    
+    vocabulary = set(token_counts.keys())
+    return vocabulary
+
+def apply_unk_by_coverage(token_counts, coverage):
+    total_mass = sum(token_counts.values())
+    sorted_token_counts = sorted(token_counts.items(), 
+                                  key=lambda x: x[1], 
+                                  reverse=True)
+
+    updated_token_counts: dict[str, int] = dict()
+    cumulative_mass = 0
+    unknown_count = 0
+    for token, count in sorted_token_counts:
+        if cumulative_mass / total_mass < coverage:
+            updated_token_counts[token] = count
+            cumulative_mass += count
+        else:
+            unknown_count += count
+    updated_token_counts[UNKNOWN_TOKEN] = unknown_count
+    return updated_token_counts
+\end{minted}
+  \caption{Vocabulary construction and unknown token handling.}
+  \label{lst:getvocabulary}
+\end{listing}
+
+\subsection{Probability Computation and Smoothing}
+The model computes n-gram probabilities using add-k smoothing, supporting \(k \ge 0\). The probability of an n-gram is computed as
+
+\[
+  P(w_n | w_{n-1}, \ldots, w_1) = \frac{C(w_1, \ldots, w_n) + k}{C(w_1, \ldots, w_{n-1}) + kV}
+\]
+
+where \(C(w_1, \ldots, w_n)\) is the count of the n-gram, \(C(w_1, \ldots, w_{n-1})\) is the count of the (n-1)-gram context, \(V\) is the vocabulary size, and \(k\) is the smoothing parameter.
+\subsubsection{Implementation}
+Our implementation, given in \ref{lst:getprobability}, handles both unigram and higher-order n-grams, with special handling for the unigram case where the denominator is the total token count plus \(kV\). The add-k smoothing is captured by the parameter \texttt{smoothing}.
+
+\begin{listing}[H]
+  \begin{minted}[frame=single,framesep=10pt]{python}
+def get_probability(self, *tokens: Token) -> float:
+  vocabulary_size = len(self.vocabulary)
+  
+  # handle unigram case
+  if self.n == 1:
+      a = (self.ngram_counts.get(tokens, 0) + self.smoothing)
+      b = (self.all_tokens_count + (self.smoothing * vocabulary_size))
+      return a / b if b > 0 else 0.0
+  
+  # handle ngram case
+  else:
+      preceding = tokens[:-1]
+
+      # Count of the full n-gram tokens
+      a = self.ngram_counts.get(tokens, 0) + self.smoothing
+      
+      # Count of the (n-1) preceding tokens
+      b = self.context_counts.get(preceding, 0)
+          + (self.smoothing * vocabulary_size)
+
+      return a / b if b > 0 else 0.0
+\end{minted}
+  \caption{Probability calculation function with add-k smoothing.}
+  \label{lst:getprobability}
+\end{listing}
+
+
 \subsection{Implementation of perplexity}
 
-\section{Eval, Analysis and Findings}
+Perplexity is computed as the exponentiation of the negative average log-probability of the test corpus. The formula for perplexity is given by
 
-\section{Others}
+\begin{align*}
+  PP(W)= \exp\left(-\frac{1}{N} \sum_{i=1}^{N} \log P(w_i | w_{i-1}, \ldots, w_{i-n+1})\right)
+\end{align*}
 
+where \(W\) is the test corpus, \(N\) is the total number of tokens in the test set, and \(P(w_i | w_{i-1}, \ldots, w_{i-n+1})\) is the probability of token \(w_i\) given its preceding \(n-1\) tokens.
+
+\subsubsection{Implementation}
+The implementation, given in \ref{lst:getperplexity}, iterates over each line in the test dataset, computes the log-probability of each n-gram, and accumulates these, taking their mean, to compute the overall perplexity.
+
+\begin{listing}[H]
+  \begin{minted}[frame=single,framesep=10pt]{python}
+import numpy as np
+def get_perplexity(self, datum: str) -> float:
+    ngrams: list[NGram] = []
+
+    ngrams.extend(NGramLanguageModel._get_ngrams_from_line(datum, 
+                                                            self.vocabulary, 
+                                                            self.n))
+    nll = - np.log([self.get_probability(*tokens) for tokens in ngrams])
+    pp: np.float64 = np.exp(np.mean(nll))
+
+    return pp
+
+def get_mean_perplexity(self, data: Dataset) -> float:
+    pps: list[float] = []
+    for line in data:
+        pp = self.get_perplexity(line)
+        pps.append(pp)
+    return float(np.mean(pps))
+\end{minted}
+  \caption{Perplexity calculation.}
+  \label{lst:getperplexity}
+\end{listing}
+
+\section{Evaluation, Analysis and Findings}
+
+% Eval, Analysis and Findings – including but may not be limited to: (1) report training and vali-
+% dation set perpexlity; (2) how the smoothing strategy affects the performance on validation set
+% (30%);
+
+\section{Miscellaneous}
+
+\subsection{Python Library Usage}
+The implementation uses minimal external libraries, primarily relying on Python's standard library. The only external library used is NumPy, which is employed for numerical computations, specifically for calculating logarithms and exponentials in the perplexity calculation. The project was written in Python 3.13.7.
+
+\subsection{Feedback}
+\begin{itemize}
+  \item The coding portion was completed within approximately one day, with a few issues resolved via pull requests over the following week or so.
+  \item The assignment was simple enough to complete with minimal experience in NLP, while still fostering practical skills.
+  \item Providing a target perplexity as a benchmark would enhance the clarity of expectations.
+  \item Incorporating automated grading with the option for unlimited submissions would be a valuable addition, allowing students to iteratively refine their implementations based on immediate feedback.
+\end{itemize}
+
+\subsection{Contributions}
+\begin{itemize}
+  \item Matthew Evans: Initial project setup, vocabulary construction, unknown token handling, probability computation, smoothing, and perplexity calculation.
+  \item Ruochen Meng: Review, bug fixes in probability calculation, improvements to unknown token handling.
+  \item Saul Garay: Review, bug fixes in vocabulary construction and probability calculation.
+\end{itemize}
 
 
 \end{document}

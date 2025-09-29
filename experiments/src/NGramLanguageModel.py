@@ -25,7 +25,7 @@ class NGramLanguageModel():
         Args:
             n: the size of the n-grams
             smoothing: the smoothing factor, e.g., 0 for none, 1 for laplace, etc.
-            unknown_epsilon: the log2 count distance below which a token is mapped to <UNK>
+            coverage: the probability mass, below which a token is mapped to <UNK>
             training_data: Iterable of training strings (can be loaded line by line)
             validation_data: Iterable of validation strings (can be loaded line by line)
         """
@@ -86,6 +86,14 @@ class NGramLanguageModel():
 
 
     def get_perplexity(self, datum: str) -> float:
+        """
+        Get the perplexity of a single datum (line of text).
+        
+        Args:
+            datum: The line of text to evaluate
+        Returns:
+            The perplexity of the datum
+        """
         ngrams: list[NGram] = []
 
         ngrams.extend(NGramLanguageModel._get_ngrams_from_line(datum, self.vocabulary, self.n))
@@ -95,6 +103,14 @@ class NGramLanguageModel():
         return pp
     
     def get_mean_perplexity(self, data: Dataset) -> float:
+        """
+            Get the mean perplexity of a dataset (multiple lines of text).
+            
+            Args:
+                data: The dataset to evaluate
+            Returns:
+                The mean perplexity of the dataset
+        """
         pps: list[float] = []
         for line in data:
             pp = self.get_perplexity(line)
@@ -105,6 +121,12 @@ class NGramLanguageModel():
     def _get_context_counts(ngram_counts: Dict[NGram, int]) -> Dict[NGram, int]:
         """
         Calculates (n-1)-gram context counts from n-gram counts.
+        
+        Args:
+            ngram_counts: A dictionary of n-gram counts
+            
+        Returns:
+            A dictionary of (n-1)-gram context counts
         """
         context_counts: Dict[NGram, int] = dict()
         if not ngram_counts:
@@ -117,19 +139,39 @@ class NGramLanguageModel():
     
     @staticmethod
     def _get_vocabulary(data: Dataset, coverage: float) -> set[Token]:
+        """
+        Build the vocabulary from the dataset, applying <UNK> based on coverage.
+        
+        Args:
+            data: The dataset to build the vocabulary from
+            coverage: The probability mass, below which a token is mapped to <UNK>
+        
+        Returns:
+            A set of tokens representing the vocabulary
+        """
         
         token_counts: dict[str, int] = dict()
         for line in data:
             for token in NGramLanguageModel._parse_tokens(line):
                 token_counts[token] = token_counts.get(token, 0) + 1
                 
-        token_counts = NGramLanguageModel.apply_unk_by_coverage(token_counts, coverage)
+        token_counts = NGramLanguageModel._apply_unk_by_coverage(token_counts, coverage)
         
         vocabulary = set(token_counts.keys())
         return vocabulary
     
     @staticmethod
-    def apply_unk_by_coverage(token_counts, coverage):
+    def _apply_unk_by_coverage(token_counts, coverage) -> dict[str, int]:
+        """
+        Apply <UNK> token based on coverage threshold.
+        
+        Args:
+            token_counts: A dictionary of token counts
+            coverage: The probability mass, below which a token is mapped to <UNK>
+            
+        Returns:
+            An updated dictionary of token counts with <UNK> applied
+        """
         total_mass = sum(token_counts.values())
         sorted_token_counts = sorted(token_counts.items(), key=lambda x: x[1], reverse=True)
 
@@ -148,9 +190,17 @@ class NGramLanguageModel():
     @staticmethod
     def _get_ngram_counts(data: Dataset, vocabulary: set[Token], n: int) -> Dict[NGram, int]:
         """
-        Build the statistics to be used by the model
+        Build the statistics (i.e., n-gram counts) to be used by the model
+
+        Args:
+            data: The dataset to build the n-gram counts from
+            vocabulary: The vocabulary to use for filtering
+            n: The n-gram size
+
+        Returns:
+            A dictionary of n-gram counts
         """
-        
+
         counts: Dict[NGram, int] = dict()
 
         for line in data:
@@ -165,6 +215,12 @@ class NGramLanguageModel():
     def _parse_tokens(line: str) -> list[Token]:
         """
         Parse and split a line into tokens.
+        
+        Args:
+            line: The line of text to parse
+            
+        Returns:
+            A list of tokens extracted from the line
         """
         # For now, just split on whitespace characters.
         # Might consider more sophisticated approach such as using "stop words", etc.
@@ -178,6 +234,8 @@ class NGramLanguageModel():
         
         Args:
             line: The line of text to parse
+            vocabulary: The vocabulary to use for filtering
+            n: The n-gram size
 
         Returns:
             A list of n-grams extracted from the line
